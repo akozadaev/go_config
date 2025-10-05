@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
@@ -29,13 +30,23 @@ var rootCmd = &cobra.Command{
 	Use:   "unified-config-demo",
 	Short: "Demo: unified config from flags, env, and file",
 	Run: func(cmd *cobra.Command, args []string) {
+		// === Отладка: выводим все ключи и значения из viper ===
+		fmt.Println("🔍 Viper configuration debug:")
+		keys := []string{"app.host", "app.port", "db.name"}
+		for _, key := range keys {
+			val := viper.Get(key)
+			envVar := "APP_" + strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
+			fmt.Printf("  %s = %v (env: %s = %q)\n", key, val, envVar, os.Getenv(envVar))
+		}
+		fmt.Println()
+
 		// Применяем приоритет: Viper сам обрабатывает это
 		if err := viper.Unmarshal(&config); err != nil {
-			fmt.Printf("Unable to decode config: %v\n", err)
+			fmt.Printf("❌ Unable to decode config: %v\n", err)
 			os.Exit(1)
 		}
 
-		fmt.Println("✅ Final configuration:")
+		fmt.Println("Final configuration:")
 		fmt.Printf("  App Host: %s\n", config.App.Host)
 		fmt.Printf("  App Port: %d\n", config.App.Port)
 		fmt.Printf("  DB Name:  %s\n", config.DB.Name)
@@ -58,12 +69,19 @@ func init() {
 
 	// Установка префикса для переменных окружения
 	viper.SetEnvPrefix("APP")
+	// Делаем замену точек на подчёркивания для корректного маппинга env-переменных
+	replacer := strings.NewReplacer(".", "_")
+	viper.SetEnvKeyReplacer(replacer)
 	viper.AutomaticEnv() // читает все переменные окружения с префиксом APP_
 }
 
 func initConfig() {
 	// Загружаем .env (если есть)
-	_ = godotenv.Load() // игнорируем ошибку, если файла нет
+	if err := godotenv.Load(); err == nil {
+		fmt.Println("Loaded .env file")
+	} else {
+		fmt.Printf("No .env file found (or error): %v\n", err)
+	}
 
 	// Настройка Viper
 	if cfgFile != "" {
@@ -75,7 +93,11 @@ func initConfig() {
 	}
 
 	// Загружаем конфиг-файл (если есть)
-	_ = viper.ReadInConfig() // игнорируем ошибку, если файла нет
+	if err := viper.ReadInConfig(); err == nil {
+		fmt.Printf("Using config file: %s\n", viper.ConfigFileUsed())
+	} else {
+		fmt.Printf("Config file not loaded: %v\n", err)
+	}
 
 	// Устанавливаем значения по умолчанию (низший приоритет)
 	viper.SetDefault("app.host", "localhost")
